@@ -1,0 +1,29 @@
+workspace_root: D:\Research Orchastratiion
+active_project: thesis
+database: data/state.sqlite3
+providers:
+  order:
+  - codex
+  - claude_code
+  codex_model: gpt-5.6-terra
+  claude_model: null
+  allow_paid_fallback: false
+  timeout_seconds: 900
+kaggle:
+  enable_gpu: true
+  enable_internet: true
+  accelerator: null
+  run_timeout_seconds: 32400
+  poll_interval_seconds: 120
+telegram:
+  enabled: true
+  token_file: .secrets/telegram_token
+  allowlist_file: .secrets/telegram_allowlist
+  poll_timeout_seconds: 30
+budgets:
+  max_retries_per_run: 3
+  max_consecutive_failures: 5
+  max_experiments_per_session: 20
+  max_session_hours: 12.0
+  max_provider_calls: 200
+  cooldown_minutes_after_failures: 15
