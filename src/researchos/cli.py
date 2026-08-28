@@ -246,6 +246,88 @@ def cmd_stop(args) -> int:
     return 0
 
 
+def cmd_bundle(args) -> int:
+    """Package an experiment for manual execution on someone else's account."""
+    import json as _json
+
+    from .kaggle.bundle import RunManifest, create_bundle
+
+    settings = Settings.discover(args.workspace)
+    store = Store(settings.db_path)
+    exp = store.get_experiment(args.experiment)
+    if exp is None:
+        print(f"unknown experiment: {args.experiment}")
+        store.close()
+        return 1
+
+    manifest = RunManifest(
+        experiment_id=exp["id"],
+        project_id=exp["project_id"],
+        git_sha=exp["git_sha"],
+        methodology_version=exp["methodology_version"],
+        config_hash=exp["config_hash"],
+        dataset=exp["dataset"],
+        dataset_version=exp["dataset_version"],
+        accelerator=args.accelerator,
+        internet=settings.kaggle.enable_internet,
+        seeds=_json.loads(exp["seeds"]) if exp["seeds"] else [],
+        primary_metric=exp["primary_metric_name"],
+        estimated_runtime=args.runtime,
+    )
+    dest = Path(args.output or settings.root / f"{exp['id']}-run-bundle.zip")
+    create_bundle(dest, manifest, Path(args.code))
+    store.add_event(kind="bundle.created", message=str(dest), experiment_id=exp["id"])
+    store.close()
+    print(f"wrote {dest}")
+    return 0
+
+
+def cmd_import(args) -> int:
+    """Ingest results from an externally executed run."""
+    from .kaggle.bundle import BundleError, import_results
+
+    settings = Settings.discover(args.workspace)
+    store = Store(settings.db_path)
+    try:
+        result = import_results(
+            Path(args.archive),
+            expected_experiment_id=args.experiment,
+            expected_config_hash=args.config_hash,
+        )
+    except BundleError as exc:
+        print(f"import rejected: {exc}")
+        store.close()
+        return 1
+
+    exp = store.get_experiment(result.experiment_id)
+    if exp is None:
+        print(f"unknown experiment: {result.experiment_id}")
+        store.close()
+        return 1
+
+    run_id = store.create_run(exp["id"], backend="external_manual")
+    for name, value in result.metrics.items():
+        store.record_metric(exp["id"], name, value, run_id=run_id)
+
+    policy = _load_policy(settings, store)
+    if policy and policy.primary_metric_name in result.metrics:
+        store.set_primary_metric(
+            exp["id"], policy.primary_metric_name,
+            result.metrics[policy.primary_metric_name],
+            policy.primary_metric_direction,
+        )
+
+    if exp["status"] == "running":
+        store.transition_experiment(exp["id"], "imported")
+        store.transition_experiment(exp["id"], "completed")
+
+    for warning in result.warnings:
+        print(f"warning: {warning}")
+    print(f"imported {len(result.metrics)} metric(s) into {exp['id']}")
+    store.close()
+    return 0
+
+
 def cmd_events(args) -> int:
     settings = Settings.discover(args.workspace)
     store = Store(settings.db_path)
@@ -285,6 +367,20 @@ def build_parser() -> argparse.ArgumentParser:
     start.set_defaults(func=cmd_start)
 
     sub.add_parser("stop", help="ask a running daemon to exit").set_defaults(func=cmd_stop)
+
+    bundle = sub.add_parser("bundle", help="package an experiment for external execution")
+    bundle.add_argument("experiment")
+    bundle.add_argument("--code", required=True, help="notebook or script to bundle")
+    bundle.add_argument("--output")
+    bundle.add_argument("--accelerator", default="GPU")
+    bundle.add_argument("--runtime", default="unknown", help="estimated runtime")
+    bundle.set_defaults(func=cmd_bundle)
+
+    imp = sub.add_parser("import", help="import results from an external run")
+    imp.add_argument("archive")
+    imp.add_argument("--experiment", help="experiment id the bundle must match")
+    imp.add_argument("--config-hash", dest="config_hash")
+    imp.set_defaults(func=cmd_import)
 
     events = sub.add_parser("events", help="recent event stream")
     events.add_argument("--limit", type=int, default=30)
