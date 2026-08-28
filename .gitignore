@@ -1,0 +1,40 @@
+# ---- SECRETS: never commit ----
+.secrets/
+*.pem
+*.key
+kaggle.json
+.env
+.env.*
+!.env.example
+**/service-role*
+*token*.txt
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Node ----
+node_modules/
+.next/
+.vercel/
+dist/
+build/
+
+# ---- Local state / research artifacts ----
+*.sqlite3
+*.db
+data/
+artifacts/
+projects/*/artifacts/
+logs/
+*.log
+
+# ---- OS ----
+Thumbs.db
+.DS_Store
