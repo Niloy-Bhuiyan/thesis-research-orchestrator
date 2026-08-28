@@ -355,8 +355,14 @@ class Store:
     # ---------------- daemon state & crash recovery ----------------
 
     def heartbeat(self, pid: int, active_experiment_id: str | None = None) -> None:
+        """Record liveness only.
+
+        Deliberately does not touch `status`: a heartbeat that set it to
+        'running' would silently un-pause a paused daemon on the next tick.
+        Status changes go through start_session/pause/stop.
+        """
         self.conn.execute(
-            "UPDATE daemon_state SET status = 'running', pid = ?, last_heartbeat = ?,"
+            "UPDATE daemon_state SET pid = ?, last_heartbeat = ?,"
             " active_experiment_id = ? WHERE id = 1",
             (pid, utcnow(), active_experiment_id),
         )

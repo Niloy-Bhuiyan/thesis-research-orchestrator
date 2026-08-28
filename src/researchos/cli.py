@@ -176,6 +176,76 @@ def cmd_init(args) -> int:
     return 0
 
 
+def _load_policy(settings: Settings, store: Store):
+    """Policy for the active project, or None if none is configured yet."""
+    if not settings.active_project:
+        return None
+    project = store.get_project(settings.active_project)
+    if project is None or not project["policy_path"]:
+        return None
+    path = Path(project["policy_path"])
+    if not path.is_absolute():
+        path = settings.root / path
+    if not path.is_file():
+        return None
+    from .policy.engine import ResearchPolicy
+
+    return ResearchPolicy.load(path)
+
+
+def _build_bot(settings: Settings):
+    if not settings.telegram.enabled:
+        return None
+    from .telegram.bot import TelegramBot, load_allowlist, load_secret
+
+    token_file = settings.secret_path(settings.telegram.token_file)
+    allow_file = settings.secret_path(settings.telegram.allowlist_file)
+    if not token_file.exists() or not allow_file.exists():
+        return None
+    return TelegramBot(load_secret(token_file), load_allowlist(allow_file))
+
+
+def cmd_start(args) -> int:
+    from .daemon import Daemon
+    from .providers.router import ProviderRouter
+
+    settings = Settings.discover(args.workspace)
+    store = Store(settings.db_path)
+    policy = _load_policy(settings, store)
+    if policy is None:
+        print("warning: no research policy configured; the loop will report "
+              "failures but will not act on them")
+    daemon = Daemon(
+        settings,
+        store,
+        bot=_build_bot(settings),
+        policy=policy,
+        router=ProviderRouter(_build_providers(settings), store=store),
+    )
+    print(f"daemon starting (pid {__import__('os').getpid()}); Ctrl+C to stop")
+    try:
+        daemon.run(interval=args.interval)
+    except KeyboardInterrupt:
+        daemon.stop("interrupted")
+    finally:
+        store.close()
+    return 0
+
+
+def cmd_stop(args) -> int:
+    """Signal a daemon in another process to exit via the shared database."""
+    settings = Settings.discover(args.workspace)
+    store = Store(settings.db_path)
+    store.conn.execute(
+        "UPDATE daemon_state SET status = 'stopped', pid = NULL WHERE id = 1"
+    )
+    store.add_event(kind="daemon.stop_requested", message="stop requested from CLI",
+                    level="warn")
+    store.close()
+    print("stop requested; the daemon exits on its next tick")
+    return 0
+
+
 def cmd_events(args) -> int:
     settings = Settings.discover(args.workspace)
     store = Store(settings.db_path)
@@ -208,6 +278,13 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--project", help="project id to create")
     init.add_argument("--force", action="store_true")
     init.set_defaults(func=cmd_init)
+
+    start = sub.add_parser("start", help="run the research daemon in the foreground")
+    start.add_argument("--interval", type=int, default=None,
+                       help="seconds between polls (default: config)")
+    start.set_defaults(func=cmd_start)
+
+    sub.add_parser("stop", help="ask a running daemon to exit").set_defaults(func=cmd_stop)
 
     events = sub.add_parser("events", help="recent event stream")
     events.add_argument("--limit", type=int, default=30)

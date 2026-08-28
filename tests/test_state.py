@@ -149,6 +149,16 @@ def test_events_are_recorded_for_status_changes(store):
     assert "experiment.created" in kinds
 
 
+def test_heartbeat_does_not_resurrect_a_paused_daemon(store):
+    """A heartbeat that wrote status='running' would silently un-pause."""
+    store.pause("budget exhausted")
+    store.heartbeat(pid=1234)
+    state = store.daemon_state()
+    assert state["status"] == "paused"
+    assert state["pause_reason"] == "budget exhausted"
+    assert state["last_heartbeat"] is not None
+
+
 def test_unknown_project_is_rejected(store):
     with pytest.raises(ValueError):
         store.create_experiment("does-not-exist")
