@@ -222,13 +222,34 @@ def cmd_start(args) -> int:
         policy=policy,
         router=ProviderRouter(_build_providers(settings), store=store),
     )
+    api_server = None
+    if not args.no_api:
+        import threading
+
+        from .api import ensure_token, serve
+
+        api_server = serve(settings, port=args.api_port)
+        threading.Thread(target=api_server.serve_forever, daemon=True).start()
+        ensure_token(settings)
+        print(f"local API on http://127.0.0.1:{args.api_port} (loopback only)")
+
     print(f"daemon starting (pid {__import__('os').getpid()}); Ctrl+C to stop")
     try:
         daemon.run(interval=args.interval)
     except KeyboardInterrupt:
         daemon.stop("interrupted")
     finally:
+        if api_server is not None:
+            api_server.shutdown()
         store.close()
+    return 0
+
+
+def cmd_token(args) -> int:
+    """Print the local API token, for pasting into the dashboard."""
+    from .api import ensure_token
+
+    print(ensure_token(Settings.discover(args.workspace)))
     return 0
 
 
@@ -364,7 +385,11 @@ def build_parser() -> argparse.ArgumentParser:
     start = sub.add_parser("start", help="run the research daemon in the foreground")
     start.add_argument("--interval", type=int, default=None,
                        help="seconds between polls (default: config)")
+    start.add_argument("--api-port", type=int, default=8765)
+    start.add_argument("--no-api", action="store_true", help="do not serve the local API")
     start.set_defaults(func=cmd_start)
+
+    sub.add_parser("token", help="print the local API token").set_defaults(func=cmd_token)
 
     sub.add_parser("stop", help="ask a running daemon to exit").set_defaults(func=cmd_stop)
 
