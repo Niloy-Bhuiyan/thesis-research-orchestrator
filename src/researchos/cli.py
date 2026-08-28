@@ -205,6 +205,21 @@ def _build_bot(settings: Settings):
     return TelegramBot(load_secret(token_file), load_allowlist(allow_file))
 
 
+def _build_sync(settings: Settings):
+    """Coordination sync, or None when the project is not linked to Supabase."""
+    if not settings.coordination.enabled:
+        return None
+    from .coordination.supabase_sync import SupabaseConfig, SupabaseSync
+
+    secrets_dir = settings.root / settings.coordination.secrets_dir
+    required = ["supabase_project_ref", "supabase_service_role_key"]
+    if not all((secrets_dir / name).exists() for name in required):
+        return None
+    return SupabaseSync(
+        SupabaseConfig.from_secrets(secrets_dir, settings.coordination.runner_id)
+    )
+
+
 def cmd_start(args) -> int:
     from .daemon import Daemon
     from .providers.router import ProviderRouter
@@ -221,6 +236,7 @@ def cmd_start(args) -> int:
         bot=_build_bot(settings),
         policy=policy,
         router=ProviderRouter(_build_providers(settings), store=store),
+        sync=_build_sync(settings),
     )
     api_server = None
     if not args.no_api:

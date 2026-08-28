@@ -79,6 +79,23 @@ class Store:
         self.conn.execute(
             "INSERT OR IGNORE INTO daemon_state (id, status) VALUES (1, 'stopped')"
         )
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Add columns introduced after a database was first created.
+
+        SQLite has no ADD COLUMN IF NOT EXISTS, and CREATE TABLE IF NOT EXISTS
+        silently skips an existing table, so new columns need adding by hand.
+        """
+        existing = {
+            row["name"]
+            for row in self.conn.execute("PRAGMA table_info(daemon_state)").fetchall()
+        }
+        if "last_synced_event_id" not in existing:
+            self.conn.execute(
+                "ALTER TABLE daemon_state ADD COLUMN last_synced_event_id"
+                " INTEGER NOT NULL DEFAULT 0"
+            )
 
     def close(self) -> None:
         self.conn.close()
@@ -376,6 +393,21 @@ class Store:
             (reason,),
         )
         self.add_event(kind="daemon.paused", message=reason, level="warn")
+
+    def events_since(self, event_id: int, limit: int = 100) -> list[sqlite3.Row]:
+        return self.conn.execute(
+            "SELECT * FROM events WHERE id > ? ORDER BY id LIMIT ?", (event_id, limit)
+        ).fetchall()
+
+    def mark_events_synced(self, event_id: int) -> None:
+        self.conn.execute(
+            "UPDATE daemon_state SET last_synced_event_id = ? WHERE id = 1", (event_id,)
+        )
+
+    def pending_proposals(self) -> list[sqlite3.Row]:
+        return self.conn.execute(
+            "SELECT * FROM proposals WHERE status = 'pending' ORDER BY created_at"
+        ).fetchall()
 
     def find_orphaned_runs(self) -> list[sqlite3.Row]:
         """Runs still marked in-flight, i.e. the daemon died while they ran.

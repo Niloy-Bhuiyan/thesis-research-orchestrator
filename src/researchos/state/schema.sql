@@ -186,7 +186,10 @@ CREATE TABLE IF NOT EXISTS daemon_state (
     session_started_at       TEXT,
     experiments_this_session INTEGER NOT NULL DEFAULT 0,
     consecutive_failures     INTEGER NOT NULL DEFAULT 0,
-    provider_calls_count     INTEGER NOT NULL DEFAULT 0
+    provider_calls_count     INTEGER NOT NULL DEFAULT 0,
+    -- Highest event id already pushed to the coordination layer, so a restart
+    -- resumes where it left off instead of re-uploading the whole feed.
+    last_synced_event_id     INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_exp_project ON experiments(project_id, created_at);

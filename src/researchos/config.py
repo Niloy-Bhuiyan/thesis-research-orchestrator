@@ -52,6 +52,15 @@ class BudgetSettings:
 
 
 @dataclass
+class CoordinationSettings:
+    """Remote control via Supabase. Off unless secrets are present."""
+
+    enabled: bool = True
+    runner_id: str = "laptop"
+    secrets_dir: str = ".secrets"
+
+
+@dataclass
 class Settings:
     workspace_root: str
     active_project: str | None = None
@@ -60,6 +69,7 @@ class Settings:
     kaggle: KaggleSettings = field(default_factory=KaggleSettings)
     telegram: TelegramSettings = field(default_factory=TelegramSettings)
     budgets: BudgetSettings = field(default_factory=BudgetSettings)
+    coordination: CoordinationSettings = field(default_factory=CoordinationSettings)
 
     @property
     def root(self) -> Path:
@@ -83,6 +93,7 @@ class Settings:
             kaggle=KaggleSettings(**(data.get("kaggle") or {})),
             telegram=TelegramSettings(**(data.get("telegram") or {})),
             budgets=BudgetSettings(**(data.get("budgets") or {})),
+            coordination=CoordinationSettings(**(data.get("coordination") or {})),
         )
 
     @classmethod

@@ -23,7 +23,10 @@ const SECTIONS: { group: string; items: { href: string; label: string }[] }[] = 
   },
   {
     group: "System",
-    items: [{ href: "/settings", label: "Settings" }],
+    items: [
+      { href: "/cloud", label: "Remote" },
+      { href: "/settings", label: "Settings" },
+    ],
   },
 ];
 

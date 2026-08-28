@@ -61,6 +61,7 @@ class Daemon:
         bot: TelegramBot | None = None,
         policy: ResearchPolicy | None = None,
         router=None,
+        sync=None,
     ):
         self.settings = settings
         self.store = store
@@ -68,6 +69,7 @@ class Daemon:
         self.bot = bot
         self.policy = policy
         self.router = router
+        self.sync = sync
         self.budgets = Budgets(**vars(settings.budgets))
         self._stop = False
         self._session_started = False
@@ -385,10 +387,96 @@ class Daemon:
 
     # ---------------- main loop ----------------
 
+    # ---------------- coordination layer ----------------
+
+    def sync_up(self) -> None:
+        """Push liveness, new events and pending approvals. Never blocking.
+
+        A coordination outage is logged and ignored: the research loop must
+        keep running when the remote layer is unreachable.
+        """
+        if self.sync is None:
+            return
+        state = self.store.daemon_state()
+        project = (
+            self.store.get_project(self.settings.active_project)
+            if self.settings.active_project
+            else None
+        )
+        try:
+            self.sync.heartbeat(state, project)
+            events = self.store.events_since(state["last_synced_event_id"])
+            if events:
+                self.sync.push_events([dict(e) for e in events])
+                self.store.mark_events_synced(max(e["id"] for e in events))
+            proposals = self.store.pending_proposals()
+            if proposals:
+                self.sync.push_proposals([dict(p) for p in proposals])
+        except Exception as exc:  # noqa: BLE001
+            self.store.add_event(
+                kind="coordination.error", message=f"sync up failed: {exc}"[:300],
+                level="warn",
+            )
+
+    def sync_down(self, report: TickReport) -> None:
+        """Drain remote commands. Each is acked so it cannot run twice."""
+        if self.sync is None:
+            return
+        try:
+            commands = self.sync.pull_commands()
+        except Exception as exc:  # noqa: BLE001
+            self.store.add_event(
+                kind="coordination.error", message=f"sync down failed: {exc}"[:300],
+                level="warn",
+            )
+            return
+
+        for command in commands:
+            try:
+                self.sync.ack_command(command["id"], "acked")
+                result = self._apply_remote_command(command)
+                self.sync.ack_command(command["id"], "done", result)
+                report.actions.append(f"remote:{command['type']}")
+            except Exception as exc:  # noqa: BLE001
+                try:
+                    self.sync.ack_command(command["id"], "failed", str(exc)[:300])
+                except Exception:  # noqa: BLE001, S110
+                    pass
+
+    def _apply_remote_command(self, command: dict) -> str:
+        kind = command["type"]
+        params = command.get("params") or {}
+        self.store.add_event(
+            kind=f"remote.{kind}", message=f"command {command['id']} from dashboard"
+        )
+        if kind == "pause":
+            return self._pause_cmd()
+        if kind == "resume":
+            return self._resume_cmd()
+        if kind == "stop":
+            self.stop("stopped from dashboard")
+            return "Daemon stopping."
+        if kind == "set_mode":
+            mode = params.get("mode")
+            self.store.set_mode(self.settings.active_project, mode)
+            return f"Mode set to {mode}."
+        if kind in ("approve", "reject"):
+            proposal_id = params.get("proposal_id")
+            if not proposal_id:
+                pending = self.store.pending_proposals()
+                if not pending:
+                    return "No pending proposal."
+                proposal_id = pending[0]["id"]
+            return self._decide(proposal_id, kind == "approve")
+        raise ValueError(f"unsupported command: {kind}")
+
+    # ---------------- main loop ----------------
+
     def tick(self) -> TickReport:
         report = TickReport()
         self.store.heartbeat(os.getpid(), self.store.daemon_state()["active_experiment_id"])
         self.poll_telegram(report)
+        self.sync_down(report)
 
         state = self.store.daemon_state()
         if self._session_started and state["status"] == "stopped":
@@ -408,6 +496,7 @@ class Daemon:
             return report
 
         self.check_runs(report)
+        self.sync_up()
         return report
 
     def run(self, interval: int | None = None) -> None:

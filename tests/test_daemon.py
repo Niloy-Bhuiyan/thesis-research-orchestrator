@@ -314,6 +314,120 @@ def test_telegram_outage_does_not_stop_the_loop(env):
     assert any(e["kind"] == "telegram.error" for e in store.recent_events())
 
 
+# ---------------- coordination layer ----------------
+
+
+class FakeSync:
+    def __init__(self, commands=None, fail=False):
+        self.commands = list(commands or [])
+        self.fail = fail
+        self.heartbeats = []
+        self.events = []
+        self.proposals = []
+        self.acks = []
+
+    def heartbeat(self, state, project=None):
+        if self.fail:
+            raise RuntimeError("coordination unreachable")
+        self.heartbeats.append(dict(state))
+
+    def push_events(self, events):
+        self.events.extend(events)
+        return len(events)
+
+    def push_proposals(self, proposals):
+        self.proposals.extend(proposals)
+        return len(proposals)
+
+    def pull_commands(self):
+        if self.fail:
+            raise RuntimeError("coordination unreachable")
+        batch, self.commands = self.commands, []
+        return batch
+
+    def ack_command(self, command_id, status, result=None):
+        self.acks.append((command_id, status, result))
+
+
+def test_sync_pushes_heartbeat_and_events(env):
+    settings, store, policy, _ = env
+    sync = FakeSync()
+    Daemon(settings, store, kaggle=FakeKaggle(), policy=policy, sync=sync).tick()
+    assert len(sync.heartbeats) == 1
+    assert any(e["kind"] == "project.created" for e in sync.events)
+
+
+def test_events_are_not_pushed_twice(env):
+    settings, store, policy, _ = env
+    sync = FakeSync()
+    daemon = Daemon(settings, store, kaggle=FakeKaggle(), policy=policy, sync=sync)
+    daemon.tick()
+    first = len(sync.events)
+    daemon.tick()
+    assert len(sync.events) == first  # nothing new happened in between
+
+
+def test_sync_resumes_from_persisted_watermark(env):
+    """A restart must not re-upload the entire event feed."""
+    settings, store, policy, _ = env
+    sync = FakeSync()
+    Daemon(settings, store, kaggle=FakeKaggle(), policy=policy, sync=sync).tick()
+    assert store.daemon_state()["last_synced_event_id"] > 0
+
+
+def test_pending_proposals_are_pushed(env):
+    settings, store, policy, tmp_path = env
+    running_experiment(store, tmp_path, log=SHAPE_LOG)
+    sync = FakeSync()
+    Daemon(settings, store, kaggle=FakeKaggle({"niloybhuiyan/exp": "error"}),
+           bot=FakeBot(), policy=policy, sync=sync).tick()
+    assert any(p["status"] == "pending" for p in sync.proposals)
+
+
+def test_remote_pause_command_is_applied_and_acked(env):
+    settings, store, policy, _ = env
+    sync = FakeSync(commands=[{"id": "c1", "type": "pause", "params": {}}])
+    report = Daemon(settings, store, kaggle=FakeKaggle(), policy=policy,
+                    sync=sync).tick()
+    assert store.daemon_state()["status"] == "paused"
+    assert "remote:pause" in report.actions
+    assert ("c1", "acked", None) in sync.acks
+    assert any(a[0] == "c1" and a[1] == "done" for a in sync.acks)
+
+
+def test_remote_set_mode_command(env):
+    settings, store, policy, _ = env
+    sync = FakeSync(commands=[
+        {"id": "c2", "type": "set_mode", "params": {"mode": "locked_evaluation"}}
+    ])
+    Daemon(settings, store, kaggle=FakeKaggle(), policy=policy, sync=sync).tick()
+    assert store.get_project("thesis")["mode"] == "locked_evaluation"
+
+
+def test_unsupported_remote_command_is_failed_not_executed(env):
+    settings, store, policy, _ = env
+    sync = FakeSync(commands=[{"id": "c3", "type": "rm_rf", "params": {}}])
+    Daemon(settings, store, kaggle=FakeKaggle(), policy=policy, sync=sync).tick()
+    assert any(a[0] == "c3" and a[1] == "failed" for a in sync.acks)
+
+
+def test_coordination_outage_does_not_stop_the_loop(env):
+    """The research loop must survive the remote layer being unreachable."""
+    settings, store, policy, tmp_path = env
+    exp_id, _ = running_experiment(store, tmp_path, log=OOM_LOG)
+    daemon = Daemon(settings, store, kaggle=FakeKaggle({"niloybhuiyan/exp": "error"}),
+                    policy=policy, sync=FakeSync(fail=True))
+    daemon.tick()  # must not raise
+    assert store.get_experiment(exp_id)["status"] == "failed"
+    assert any(e["kind"] == "coordination.error" for e in store.recent_events())
+
+
+def test_daemon_works_with_no_sync_configured(env):
+    settings, store, policy, _ = env
+    Daemon(settings, store, kaggle=FakeKaggle(), policy=policy, sync=None).tick()
+    assert store.daemon_state()["last_heartbeat"] is not None
+
+
 def test_heartbeat_is_written_every_tick(env):
     settings, store, policy, _ = env
     Daemon(settings, store, kaggle=FakeKaggle(), policy=policy).tick()
