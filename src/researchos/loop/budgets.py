@@ -8,7 +8,7 @@ not hand the agent a fresh allowance.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 
 @dataclass
@@ -52,7 +52,7 @@ def check_retry(retry_count: int, budgets: Budgets) -> BudgetVerdict:
 
 def check_session(state, budgets: Budgets, now: datetime | None = None) -> BudgetVerdict:
     """Session-wide limits, evaluated against the persisted daemon row."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
 
     if state["consecutive_failures"] >= budgets.max_consecutive_failures:
         return BudgetVerdict(
@@ -94,7 +94,7 @@ def cooldown_remaining(
     failed_at = _parse(last_failure_at)
     if failed_at is None:
         return timedelta(0)
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     elapsed = now - failed_at
     window = timedelta(minutes=budgets.cooldown_minutes_after_failures)
     return max(timedelta(0), window - elapsed)

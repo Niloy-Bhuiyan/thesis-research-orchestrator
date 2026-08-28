@@ -17,10 +17,12 @@ from dataclasses import dataclass, field
 from ..diagnosis.classifier import Diagnosis
 from ..policy.engine import (
     DENY,
-    INFRASTRUCTURE as POLICY_INFRASTRUCTURE,
     NEEDS_APPROVAL,
     ResearchPolicy,
     evaluate,
+)
+from ..policy.engine import (
+    INFRASTRUCTURE as POLICY_INFRASTRUCTURE,
 )
 from .budgets import Budgets, check_retry
 

@@ -1,4 +1,3 @@
-import pytest
 
 from researchos.diagnosis.classifier import (
     CONFIGURATION,

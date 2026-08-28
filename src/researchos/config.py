@@ -83,7 +83,7 @@ class Settings:
         return self.root / relative
 
     @classmethod
-    def load(cls, path: str | Path) -> "Settings":
+    def load(cls, path: str | Path) -> Settings:
         data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
         return cls(
             workspace_root=data.get("workspace_root", str(Path(path).parent)),
@@ -97,7 +97,7 @@ class Settings:
         )
 
     @classmethod
-    def discover(cls, start: str | Path | None = None) -> "Settings":
+    def discover(cls, start: str | Path | None = None) -> Settings:
         """Find researchos.yaml walking up from `start`, else use defaults."""
         current = Path(start or Path.cwd()).resolve()
         for directory in (current, *current.parents):

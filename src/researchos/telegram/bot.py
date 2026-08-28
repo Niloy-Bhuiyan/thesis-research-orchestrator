@@ -9,9 +9,9 @@ the bot does not confirm its own existence to strangers.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import requests
 

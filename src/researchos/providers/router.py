@@ -12,8 +12,8 @@ never escalates to a paid API on its own.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
-from typing import Callable, Sequence
 
 from .base import (
     FAILOVER_OUTCOMES,

@@ -15,7 +15,6 @@ import json
 import re
 import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from urllib.parse import urlparse
 
 from .config import Settings

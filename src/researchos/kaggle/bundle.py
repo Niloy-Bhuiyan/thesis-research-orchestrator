@@ -85,7 +85,7 @@ class RunManifest:
         return json.dumps(self.__dict__, indent=2, sort_keys=True)
 
     @classmethod
-    def from_json(cls, text: str) -> "RunManifest":
+    def from_json(cls, text: str) -> RunManifest:
         return cls(**json.loads(text))
 
 

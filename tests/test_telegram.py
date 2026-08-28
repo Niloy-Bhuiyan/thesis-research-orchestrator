@@ -3,7 +3,6 @@ import pytest
 from researchos.telegram.bot import (
     TelegramBot,
     Unauthorized,
-    Update,
     approval_keyboard,
     load_allowlist,
     parse_update,

@@ -29,3 +29,15 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+
+# Pinned explicitly so CI does not start failing when a new ruff version
+# changes its defaults.
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+    "B008",  # dependency-injection defaults are deliberate here
+    "E501",  # long lines are caught by the formatter, not the linter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]

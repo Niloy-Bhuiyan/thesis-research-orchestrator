@@ -46,7 +46,7 @@ class SupabaseConfig:
         return f"https://{self.project_ref}.supabase.co"
 
     @classmethod
-    def from_secrets(cls, secrets_dir: str | Path, runner_id: str) -> "SupabaseConfig":
+    def from_secrets(cls, secrets_dir: str | Path, runner_id: str) -> SupabaseConfig:
         secrets_dir = Path(secrets_dir)
         return cls(
             project_ref=read_secret(secrets_dir / "supabase_project_ref"),

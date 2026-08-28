@@ -23,12 +23,9 @@ from .kaggle.runner import KaggleRunner, QuotaUnavailable, parse_metrics
 from .loop.budgets import Budgets, check_session
 from .loop.optimizer import (
     ABANDON,
-    ESCALATE_PROVIDER,
     EXTERNAL_RUN,
     REQUEST_APPROVAL,
-    RETRY_AUTO,
     decide_next_action,
-    is_improvement,
 )
 from .policy.engine import ResearchPolicy
 from .state.db import Store, utcnow
@@ -184,8 +181,9 @@ class Daemon:
             " experiments_this_session = experiments_this_session + 1 WHERE id = 1"
         )
 
+        # best_experiment already applies the metric's own direction, so being
+        # the best row is sufficient; no separate comparison is needed here.
         best = self.store.best_experiment(exp["project_id"])
-        direction = self.policy.primary_metric_direction if self.policy else "minimize"
         improved = best is not None and best["id"] == exp["id"] and value is not None
         report.actions.append("completed")
         self.notify(

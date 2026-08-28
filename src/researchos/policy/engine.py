@@ -80,7 +80,7 @@ class ResearchPolicy:
     locked_files: list[str] = field(default_factory=list)
 
     @classmethod
-    def load(cls, path: str | Path) -> "ResearchPolicy":
+    def load(cls, path: str | Path) -> ResearchPolicy:
         data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
         goal = data.get("research_goal") or {}
         metric = goal.get("primary_metric") or {}

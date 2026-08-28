@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python (lint, types, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check src tests
+
+      - name: Tests
+        # The Kaggle, provider, Telegram and Supabase integrations are all
+        # driven through seams, so the suite runs with no credentials, no
+        # network, and without spending a second of GPU quota.
+        run: pytest -q
+
+  dashboard:
+    name: Dashboard (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        # Public placeholders only. Cloud mode is exercised at runtime, not in
+        # CI, and no real key is ever needed to prove the bundle compiles.
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+        run: npm run build
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan tracked files for credential patterns
+        run: |
+          set -euo pipefail
+          # Patterns for the credentials this project touches. Findings fail the
+          # build rather than warning, because a leaked key cannot be un-leaked.
+          patterns='sbp_[A-Za-z0-9]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|[0-9]{8,10}:AA[A-Za-z0-9_-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|eyJhbGciOi[A-Za-z0-9_-]{20,}'
+          if git grep -nIE "$patterns" -- . ':!*.lock' ':!package-lock.json' > findings.txt; then
+            echo "Potential secrets found in tracked files:"
+            cat findings.txt
+            exit 1
+          fi
+          echo "No credential patterns found in tracked files."
+
+      - name: Ensure secret paths are ignored
+        run: |
+          set -euo pipefail
+          for path in .secrets/telegram_token .secrets/supabase_service_role_key \
+                      .secrets/api_token .env; do
+            if ! git check-ignore -q "$path"; then
+              echo "::error::$path is not gitignored"
+              exit 1
+            fi
+          done
+          echo "All secret paths are ignored."

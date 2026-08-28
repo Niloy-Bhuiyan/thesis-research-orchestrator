@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -106,7 +106,7 @@ def test_provider_call_budget_stops_the_loop():
 
 
 def test_wall_clock_limit_stops_the_loop():
-    started = (datetime.now(timezone.utc) - timedelta(hours=13)).isoformat()
+    started = (datetime.now(UTC) - timedelta(hours=13)).isoformat()
     verdict = check_session(
         make_state(session_started_at=started), Budgets(max_session_hours=12)
     )
@@ -125,13 +125,13 @@ def test_budgets_are_read_from_persisted_state_so_restart_gives_no_fresh_allowan
 
 
 def test_cooldown_counts_down():
-    just_failed = datetime.now(timezone.utc).isoformat()
+    just_failed = datetime.now(UTC).isoformat()
     remaining = cooldown_remaining(just_failed, Budgets(cooldown_minutes_after_failures=15))
     assert timedelta(minutes=14) < remaining <= timedelta(minutes=15)
 
 
 def test_cooldown_zero_when_expired():
-    old = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    old = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     assert cooldown_remaining(old, Budgets()) == timedelta(0)
 
 
