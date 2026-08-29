@@ -69,6 +69,18 @@ export function HealthBanner({
   heartbeat?: string | null;
 }) {
   if (health === "online") return null;
+  if (health === "unreachable_from_cloud") {
+    return (
+      <div className="banner">
+        <strong>This page needs the dashboard running on your own machine.</strong>{" "}
+        Browsers block a page served over https from reaching a local address, so the
+        deployed dashboard cannot read your daemon even when it is running perfectly.
+        Run <code>npm run dev</code> in <code>dashboard/</code> and open the localhost
+        URL for full data, or use <a href="/cloud"><strong>Remote</strong></a> for
+        status and approvals from anywhere.
+      </div>
+    );
+  }
   if (health === "unauthorized") {
     return (
       <div className="banner">

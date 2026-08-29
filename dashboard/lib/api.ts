@@ -27,7 +27,23 @@ export function setConnection(base: string, token: string) {
   localStorage.setItem("researchos.token", token);
 }
 
-export type Health = "online" | "offline" | "unauthorized";
+export type Health = "online" | "offline" | "unauthorized" | "unreachable_from_cloud";
+
+/**
+ * Whether this page can reach a loopback daemon at all.
+ *
+ * A page served over https cannot fetch http://127.0.0.1: Chrome gates
+ * public-to-private requests behind a permission prompt, and opting in with
+ * Access-Control-Allow-Private-Network is not sufficient. So the deployed
+ * dashboard can never show local data, and saying "offline" there would be
+ * misleading - the daemon may be running perfectly.
+ */
+export function canReachLocalDaemon(): boolean {
+  if (typeof window === "undefined") return true;
+  const { protocol, hostname } = window.location;
+  if (protocol !== "https:") return true;
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${getBase()}${path}`, {
@@ -58,6 +74,11 @@ export function usePolled<T>(path: string, intervalMs = 5000) {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    if (!canReachLocalDaemon()) {
+      setHealth("unreachable_from_cloud");
+      setLoading(false);
+      return;
+    }
     try {
       await fetch(`${getBase()}/api/health`, { cache: "no-store" });
     } catch {

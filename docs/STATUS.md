@@ -69,6 +69,19 @@ start the daemon.
 
 ## Known limitations
 
+- **The deployed dashboard cannot read your local daemon.** This is a browser security
+  boundary, not a bug that can be fixed here. Chrome gates requests from an https page
+  to a loopback address behind a user permission prompt, and opting in with
+  `Access-Control-Allow-Private-Network` (which the API now sends) is necessary but not
+  sufficient. Verified empirically: `fetch` from the deployed origin fails even with a
+  healthy daemon serving 200 locally.
+
+  What this means in practice: **run the dashboard on your own machine** (`npm run dev`
+  in `dashboard/`) to see experiments, metrics, lineage and logs. Use the deployed
+  **Remote** page for status and approvals from anywhere, which works because it reads
+  Supabase rather than your laptop. The affected pages now say this explicitly instead
+  of showing a misleading "offline" banner.
+
 - **Experiment code generation is not automated.** The system packages and submits a
   notebook you supply. It does not yet write the training code itself.
 - **Git integration is partial.** Experiments record a commit SHA, but automatic

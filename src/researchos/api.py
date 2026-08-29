@@ -73,6 +73,12 @@ def build_handler(state: ApiState):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Headers", "authorization,content-type")
             self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+            # Opt in to Private Network Access. Note this is necessary but NOT
+            # sufficient: current Chrome additionally gates public-page to
+            # loopback requests behind a user permission prompt, so a dashboard
+            # served from https cannot reach this API regardless. Local pages
+            # must be served from localhost; remote access goes via Supabase.
+            self.send_header("Access-Control-Allow-Private-Network", "true")
             self.end_headers()
             self.wfile.write(body)
 
