@@ -1,0 +1,36 @@
+# Supabase project configuration, pushed with `supabase config push`.
+#
+# Auth redirects are the reason this file exists. Supabase only honours a
+# redirect URL that appears in the allow list; anything else silently falls back
+# to site_url, which defaults to http://localhost:3000. That is why magic-link
+# sign-in bounced to a dead localhost page instead of the deployed dashboard.
+
+project_id = "lggpqaxkyzxndtcgnsec"
+
+[auth]
+enabled = true
+site_url = "https://researchos-dashboard-ruby.vercel.app"
+additional_redirect_urls = [
+  "https://researchos-dashboard-ruby.vercel.app",
+  "https://researchos-dashboard-ruby.vercel.app/cloud",
+  # Kept so the dashboard can also be signed into when run locally, which is
+  # the only way to view experiments and logs.
+  "http://localhost:3000",
+  "http://localhost:3000/cloud",
+]
+
+# One hour. The default is short enough that a link can expire while the user
+# is still finding the email.
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+# Magic links are the only sign-in path the dashboard offers, so give them a
+# usable window rather than the very short default.
+otp_expiry = 3600
+# Rate limit on sign-in emails. Omitting this reset it to one second, which
+# would let anyone with the URL flood an inbox with login links.
+max_frequency = "60s"
+otp_length = 8
