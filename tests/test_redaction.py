@@ -1,5 +1,8 @@
 """Credentials must never reach the event stream.
 
+Every token below is synthetic. Never put a live credential in a test: the
+first version of this file did, and pushed it to the remote.
+
 The event stream is synced off-machine and rendered in a browser, so a secret
 that lands there has left the researcher's control. These tests exist because a
 real Telegram bot token was written to the log and synced to Supabase: the
@@ -14,15 +17,15 @@ from researchos.state.db import Store
 
 TELEGRAM_ERROR = (
     "HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded "
-    "with url: /bot8951586512:AAHMhgXclDGIZqfh1iQpb4ZZNWScagDpN9w/getUpdates "
+    "with url: /bot1234567890:AAFsyntheticTOKENforTESTINGonly12345/getUpdates "
     "(Caused by NameResolutionError(...))"
 )
 
 
 def test_telegram_token_in_url_is_redacted():
     cleaned = redact(TELEGRAM_ERROR)
-    assert "AAHMhgXclDGIZqfh1iQpb4ZZNWScagDpN9w" not in cleaned
-    assert "8951586512" not in cleaned
+    assert "AAFsyntheticTOKENforTESTINGonly12345" not in cleaned
+    assert "1234567890" not in cleaned
     assert "/bot[redacted]/getUpdates" in cleaned
 
 
@@ -36,7 +39,7 @@ def test_surrounding_context_is_preserved():
 @pytest.mark.parametrize(
     "secret",
     [
-        "8951586512:AAHMhgXclDGIZqfh1iQpb4ZZNWScagDpN9w",
+        "1234567890:AAFsyntheticTOKENforTESTINGonly12345",
         "sbp_abcdef0123456789abcdef0123456789abcdef01",
         "ghp_aBcDeF0123456789aBcDeF0123456789aBcDeF",
         "sk-abcdefghijklmnopqrstuvwxyz0123456789",
@@ -81,7 +84,7 @@ def test_add_event_scrubs_the_message(tmp_path):
     with Store(tmp_path / "s.sqlite3") as store:
         store.add_event(kind="telegram.error", message=TELEGRAM_ERROR, level="warn")
         stored = store.recent_events(1)[0]["message"]
-    assert "AAHMhgXclDGIZqfh1iQpb4ZZNWScagDpN9w" not in stored
+    assert "AAFsyntheticTOKENforTESTINGonly12345" not in stored
     assert "[redacted]" in stored
 
 
@@ -90,10 +93,10 @@ def test_add_event_scrubs_structured_data(tmp_path):
         store.add_event(
             kind="telegram.error",
             message="call failed",
-            data={"url": "/bot8951586512:AAHMhgXclDGIZqfh1iQpb4ZZNWScagDpN9w/getMe"},
+            data={"url": "/bot1234567890:AAFsyntheticTOKENforTESTINGonly12345/getMe"},
         )
         stored = store.recent_events(1)[0]["data"]
-    assert "AAHMhgXclDGIZqfh1iQpb4ZZNWScagDpN9w" not in stored
+    assert "AAFsyntheticTOKENforTESTINGonly12345" not in stored
 
 
 def test_no_event_written_by_the_suite_contains_a_secret(tmp_path):
