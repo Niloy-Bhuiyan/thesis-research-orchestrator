@@ -13,6 +13,8 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ..redaction import redact
+
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 SCHEMA_VERSION = 1
 
@@ -349,6 +351,9 @@ class Store:
         run_id: str | None = None,
         data: dict | None = None,
     ) -> None:
+        # Single choke point for the event stream, which is synced off-machine
+        # and rendered in a browser. Scrubbing here means no caller can leak a
+        # credential by logging an exception that embeds one in a URL.
         self.conn.execute(
             "INSERT INTO events (project_id, experiment_id, run_id, level, kind, message,"
             " data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -358,8 +363,8 @@ class Store:
                 run_id,
                 level,
                 kind,
-                message,
-                json.dumps(data) if data else None,
+                redact(message),
+                redact(json.dumps(data)) if data else None,
                 utcnow(),
             ),
         )
