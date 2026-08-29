@@ -167,14 +167,21 @@ def build_handler(state: ApiState):
 
         def do_POST(self):  # noqa: N802
             path = urlparse(self.path).path.rstrip("/")
+
+            # Drain the body before any early return. On a keep-alive
+            # connection an unread body stays in the socket and is misparsed as
+            # the start of the next request, so rejecting a POST without
+            # reading it corrupts the following legitimate one.
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length) if length else b""
+
             if not self._authorized():
                 return self._send({"error": "unauthorized"}, 401)
             if path != "/api/commands":
                 return self._send({"error": "not found"}, 404)
 
-            length = int(self.headers.get("Content-Length") or 0)
             try:
-                payload = json.loads(self.rfile.read(length) or b"{}")
+                payload = json.loads(raw or b"{}")
             except json.JSONDecodeError:
                 return self._send({"error": "invalid json"}, 400)
 

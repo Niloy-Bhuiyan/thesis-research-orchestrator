@@ -183,6 +183,28 @@ def test_command_without_token_is_rejected(api):
     assert exc.value.code == 401
 
 
+def test_rejected_post_does_not_corrupt_the_next_request(api):
+    """A 401 that leaves the body unread wedges the keep-alive connection.
+
+    Regression: the auth check ran before the body was drained, so an
+    unauthorized POST could break the *following* legitimate request.
+    """
+    base, token, _, _ = api
+    for _ in range(5):
+        with pytest.raises(urllib.error.HTTPError):
+            post(base, "/api/commands", {"type": "pause", "pad": "x" * 2000})
+        status, body = get(base, "/api/status", token)
+        assert status == 200
+        assert body["daemon"]["status"] == "stopped"
+
+
+def test_rejected_unknown_path_post_also_drains_body(api):
+    base, token, _, _ = api
+    with pytest.raises(urllib.error.HTTPError):
+        post(base, "/api/nope", {"payload": "y" * 2000}, token)
+    assert get(base, "/api/experiments", token)[0] == 200
+
+
 def test_allowlist_is_explicit():
     """A new capability must be added deliberately, not by string coincidence."""
     assert ALLOWED_COMMANDS == {"pause", "resume", "stop", "set_mode", "approve", "reject"}
