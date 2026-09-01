@@ -38,3 +38,9 @@ logs/
 # ---- OS ----
 Thumbs.db
 .DS_Store
+
+# local agent tooling
+.claude/
+CLAUDE.md
+AGENTS.md
+.mcp.json
